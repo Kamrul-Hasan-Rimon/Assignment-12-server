@@ -119,11 +119,6 @@ async function run() {
     app.post("/trainer/booking", async (req, res) => {
       try {
         const { trainerId, slotId, packageName, packagePrice, slotName, userName, userEmail } = req.body;
-
-        if (!trainerId || !slotId || !packageName || !userName || !userEmail) {
-          return res.status(400).json({ message: "Missing required fields" });
-        }
-
         const newBooking = {
           trainerId,
           slotId,
@@ -135,16 +130,36 @@ async function run() {
           bookingDate: new Date(),
         };
 
-        // Insert booking into MongoDB
         const result = await bookingsCollection.insertOne(newBooking);
 
-        res.status(201).json({ message: "Booking successful", bookingId: result.insertedId });
+        res.status(201).send(result);
       } catch (error) {
         console.error("Error saving booking:", error);
         res.status(500).json({ message: "Internal Server Error" });
       }
     });
-
+    app.get('/booking/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+    
+        // Validate ObjectId before using it
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid ID format" });
+        }
+    
+        const booking = await bookingsCollection.findOne({ _id: new ObjectId(id) });
+    
+        if (!booking) {
+          return res.status(404).send({ message: "Booking not found" });
+        }
+    
+        res.status(200).send(booking);
+      } catch (error) {
+        console.error("Error retrieving booking:", error);
+        res.status(500).send({ message: "Internal Server Error", error });
+      }
+    });
+    
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
