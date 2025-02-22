@@ -17,18 +17,21 @@ app.use(express.json())
 
 const verifyToken = (req, res, next) => {
   const token = req.cookies?.token;
+
   if (!token) {
-    return res.status(401).send({ message: 'unaouthorized' })
-  } else {
-    jwt.verify(token, process.env.SECRET_TOKEN, (err, decoded) => {
-      if (err) {
-        return res.status(401).send({ message: 'unaouthorized' })
-      }
-      req.user = decoded
-    })
+    console.log("No token found");
+    return res.status(401).send({ message: 'unauthorized' });
   }
-  next()
-}
+
+  jwt.verify(token, process.env.SECRET_TOKEN, (err, decoded) => {
+    if (err) {
+      console.log("Invalid token");
+      return res.status(401).send({ message: 'unauthorized' });
+    }
+    req.user = decoded;
+    next();
+  });
+};
 
 
 const { MongoClient, ServerApiVersion } = require('mongodb');
@@ -51,7 +54,7 @@ async function run() {
     app.post('/jwt', (req, res) => {
       const user = req.body
       const token = jwt.sign(user, process.env.SECRET_TOKEN, {
-        expiresIn: '5h'
+        expiresIn: '365d'
       })
       res
         .cookie('token', token, {
@@ -59,7 +62,8 @@ async function run() {
           secure: process.env.NODE_ENV === 'production',
           sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
         })
-        .send({ success: true })
+        .send({ success: true });
+
     })
     app.post('/logout', (req, res) => {
       res
@@ -79,6 +83,7 @@ async function run() {
     const classesCollection = client.db("ClassesDB").collection("Classes")
     const bookingsCollection = client.db("BookingsDB").collection("Bookings")
     const paymentsCollection = client.db("PaymentsDB").collection("Payments")
+    const applyTrainerCollection = client.db("ApplyTrainerDB").collection("ApplyTrainer")
     const reviewsCollection = client.db("ReviewsDB").collection("Reviews")
     const forumPostsCollection = client.db("ForumPostsDB").collection("ForumPosts")
     const newsletterSubscribersCollection = client.db("NewsletterSubscribersDB").collection("NewsletterSubscribers")
@@ -118,13 +123,13 @@ async function run() {
     });
     app.post("/trainer/booking", async (req, res) => {
       try {
-        const { trainerId, slotId, packageName, packagePrice, slotName, userName, userEmail } = req.body;
+        const { trainerId, slotId, packageName, price, slotName, userName, userEmail } = req.body;
         const newBooking = {
           trainerId,
           slotId,
           slotName,
           packageName,
-          packagePrice,
+          price,
           userName,
           userEmail,
           bookingDate: new Date(),
@@ -138,28 +143,40 @@ async function run() {
         res.status(500).json({ message: "Internal Server Error" });
       }
     });
-    app.get('/booking/:id', async (req, res) => {
+
+    app.get('/trainer/booking', verifyToken, async (req, res) => {
       try {
-        const id = req.params.id;
-    
-        // Validate ObjectId before using it
-        if (!ObjectId.isValid(id)) {
-          return res.status(400).send({ message: "Invalid ID format" });
-        }
-    
-        const booking = await bookingsCollection.findOne({ _id: new ObjectId(id) });
-    
-        if (!booking) {
-          return res.status(404).send({ message: "Booking not found" });
-        }
-    
-        res.status(200).send(booking);
+        const result = await bookingsCollection.find({}).toArray();
+        res.status(200).send(result)
       } catch (error) {
-        console.error("Error retrieving booking:", error);
-        res.status(500).send({ message: "Internal Server Error", error });
+        res.status(500).send({ message: 'Failed to fetch trainners', error })
+
+      }
+    })
+    app.get('/applytrainer', async (req, res) => {
+      try {
+        const result = await applyTrainerCollection.find({}).toArray()
+        res.status(200).send(result)
+      } catch (error) {
+        res.status(500).send({ message: 'Failed to fetch trainners', error })
+      }
+    })
+    app.post('/applytrainer', async (req, res) => {
+      try {
+        const application = req.body;
+        const result = await applyTrainerCollection.insertOne(application);
+
+        if (result.insertedId) {
+          res.status(201).send({ success: true, message: "Application submitted successfully!" });
+        } else {
+          throw new Error("Database insertion failed");
+        }
+
+      } catch (error) {
+        console.error("Error submitting trainer application:", error);
+        res.status(500).send({ success: false, message: "Failed to submit application. Please try again.", error });
       }
     });
-    
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
@@ -169,6 +186,9 @@ async function run() {
     // await client.close();
   }
 }
+
+
+
 run().catch(console.dir);
 
 
