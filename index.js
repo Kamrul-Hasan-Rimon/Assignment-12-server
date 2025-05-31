@@ -109,8 +109,16 @@ async function run() {
         next();
       });
     };
+    async function logActivity({ email, description }) {
+      if (!email || !description) return;
+      await activityLogCollection.insertOne({
+        email,
+        description,
+        timestamp: new Date(),
+      });
+    }
+
     app.post("/logout", (req, res) => {
-      // With localStorage, logout is handled client-side by removing the token
       res.send({ success: true });
     });
 
@@ -119,6 +127,10 @@ async function run() {
     const classesCollection = client.db("ClassesDB").collection("Classes");
     const bookingsCollection = client.db("BookingsDB").collection("Bookings");
     const paymentsCollection = client.db("PaymentsDB").collection("Payments");
+    const activityLogCollection = client
+      .db("ActivityLogDB")
+      .collection("ActivityLog");
+
     const applyTrainerCollection = client
       .db("ApplyTrainerDB")
       .collection("ApplyTrainer");
@@ -149,13 +161,11 @@ async function run() {
           timestamp: Date.now(),
         });
 
-        res
-          .status(201)
-          .send({
-            success: true,
-            message: "User data posted successfully.",
-            result,
-          });
+        res.status(201).send({
+          success: true,
+          message: "User data posted successfully.",
+          result,
+        });
       } catch (error) {
         console.error("Error creating user:", error);
         res
@@ -237,12 +247,10 @@ async function run() {
         res.status(200).send(trainers);
       } catch (error) {
         console.error("Error fetching applied trainers:", error);
-        res
-          .status(500)
-          .send({
-            success: false,
-            message: error.message || "Failed to fetch applied trainers",
-          });
+        res.status(500).send({
+          success: false,
+          message: error.message || "Failed to fetch applied trainers",
+        });
       }
     });
 
@@ -252,24 +260,20 @@ async function run() {
         const result = await applyTrainerCollection.insertOne(application);
 
         if (result.insertedId) {
-          res
-            .status(201)
-            .send({
-              success: true,
-              message: "Application submitted successfully!",
-            });
+          res.status(201).send({
+            success: true,
+            message: "Application submitted successfully!",
+          });
         } else {
           throw new Error("Database insertion failed");
         }
       } catch (error) {
         console.error("Error submitting trainer application:", error);
-        res
-          .status(500)
-          .send({
-            success: false,
-            message: "Failed to submit application. Please try again.",
-            error,
-          });
+        res.status(500).send({
+          success: false,
+          message: "Failed to submit application. Please try again.",
+          error,
+        });
       }
     });
     // Fetch Trainer Details by ID
@@ -321,20 +325,16 @@ async function run() {
               .status(404)
               .send({ success: false, message: "Trainer not found" });
           }
-          res
-            .status(200)
-            .send({
-              success: true,
-              message: "Trainer application deleted successfully",
-            });
+          res.status(200).send({
+            success: true,
+            message: "Trainer application deleted successfully",
+          });
         } catch (error) {
           console.error("Error deleting trainer application:", error);
-          res
-            .status(500)
-            .send({
-              success: false,
-              message: "Failed to delete trainer application",
-            });
+          res.status(500).send({
+            success: false,
+            message: "Failed to delete trainer application",
+          });
         }
       }
     );
@@ -445,20 +445,16 @@ async function run() {
               .status(404)
               .send({ success: false, message: "Trainer not found" });
           }
-          res
-            .status(200)
-            .send({
-              success: true,
-              message: "Trainer application deleted successfully",
-            });
+          res.status(200).send({
+            success: true,
+            message: "Trainer application deleted successfully",
+          });
         } catch (error) {
           console.error("Error deleting trainer application:", error);
-          res
-            .status(500)
-            .send({
-              success: false,
-              message: "Failed to delete trainer application",
-            });
+          res.status(500).send({
+            success: false,
+            message: "Failed to delete trainer application",
+          });
         }
       }
     );
@@ -601,12 +597,10 @@ async function run() {
             .json({ message: "Class name and description are required." });
         }
         const result = await classesCollection.insertOne({ name, description });
-        res
-          .status(201)
-          .json({
-            classId: result.insertedId,
-            message: "Class added successfully.",
-          });
+        res.status(201).json({
+          classId: result.insertedId,
+          message: "Class added successfully.",
+        });
       } catch {
         res
           .status(500)
@@ -650,7 +644,7 @@ async function run() {
       }
     });
 
-    app.get('/forum/posts', verifyToken, async (req, res) => {
+    app.get("/forum/posts", verifyToken, async (req, res) => {
       try {
         const page = parseInt(req.query.page) || 1; // Default to page 1
         const limit = 6;
@@ -660,57 +654,62 @@ async function run() {
         const totalPosts = await forumPostsCollection.countDocuments({});
 
         // Fetch posts with user info
-        const posts = await forumPostsCollection.aggregate([
-          {
-            $lookup: {
-              from: "users",
-              localField: "userId",
-              foreignField: "_id",
-              as: "user"
-            }
-          },
-          {
-            $unwind: "$user" // Unwind the user array
-          },
-          {
-            $project: {  // Correctly project fields, including userId and user details
-              _id: 1,
-              title: 1,
-              content: 1,
-              createdAt: 1,
-              upvotes: { $ifNull: ["$upvotes", 0] },
-              downvotes: { $ifNull: ["$downvotes", 0] },
-              "user.name": 1,
-              "user.email": 1,
-              "user.role": 1,
-            }
-          },
-          {
-            $skip: skip
-          },
-          {
-            $limit: limit
-          },
-          {
-            $sort: { createdAt: -1 } // Sort by creation date
-          }
-        ]).toArray();
+        const posts = await forumPostsCollection
+          .aggregate([
+            {
+              $lookup: {
+                from: "users",
+                localField: "userId",
+                foreignField: "_id",
+                as: "user",
+              },
+            },
+            {
+              $unwind: "$user", // Unwind the user array
+            },
+            {
+              $project: {
+                // Correctly project fields, including userId and user details
+                _id: 1,
+                title: 1,
+                content: 1,
+                createdAt: 1,
+                upvotes: { $ifNull: ["$upvotes", 0] },
+                downvotes: { $ifNull: ["$downvotes", 0] },
+                "user.name": 1,
+                "user.email": 1,
+                "user.role": 1,
+              },
+            },
+            {
+              $skip: skip,
+            },
+            {
+              $limit: limit,
+            },
+            {
+              $sort: { createdAt: -1 }, // Sort by creation date
+            },
+          ])
+          .toArray();
         const totalPages = Math.ceil(totalPosts / limit);
 
         res.send({ success: true, posts, totalPages });
       } catch (error) {
         console.error("Error fetching posts:", error);
-        res.status(500).send({ success: false, message: "Failed to fetch posts." });
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to fetch posts." });
       }
     });
-    app.post('/forum/posts', verifyToken, async (req, res) => {
+    app.post("/forum/posts", verifyToken, async (req, res) => {
       try {
         const userId = req.user.userId; // Get trainer ID from JWT
         const { title, content } = req.body;
 
         // Validate inputs
         if (!title || !content) {
-          return res.status(400).json({ message: 'All fields are required' });
+          return res.status(400).json({ message: "All fields are required" });
         }
 
         // Create a new slot object
@@ -727,10 +726,10 @@ async function run() {
         // Update the trainer document by pushing the new slot onto the availableSlots array
         const result = await forumPostsCollection.insertOne(newPost);
 
-        res.status(201).json({ message: 'Post created successfully' });
+        res.status(201).json({ message: "Post created successfully" });
       } catch (error) {
-        console.error('Error creating post:', error);
-        res.status(500).json({ message: 'Failed to create post' });
+        console.error("Error creating post:", error);
+        res.status(500).json({ message: "Failed to create post" });
       }
     });
     app.post("/forum/posts/:postId/vote", verifyToken, async (req, res) => {
@@ -752,12 +751,10 @@ async function run() {
         }
         //Check for Valid Vote Value
         if (typeof vote !== "number" || (vote !== 1 && vote !== -1)) {
-          return res
-            .status(400)
-            .send({
-              success: false,
-              message: "Invalid vote value. Must be 1 or -1.",
-            });
+          return res.status(400).send({
+            success: false,
+            message: "Invalid vote value. Must be 1 or -1.",
+          });
         }
 
         const post = await forumPostsCollection.findOne({
@@ -952,6 +949,96 @@ async function run() {
         res.status(500).json({ error: "Failed to fetch balance data" });
       }
     });
+    app.put("/users/profile", async (req, res) => {
+      try {
+        const { email, name, profilePicture } = req.body;
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: { name, image: profilePicture } }
+        );
+        await logActivity({
+          email,
+          description: "Updated profile information.",
+        });
+        res.send({ success: true, message: "Profile updated.", result });
+      } catch (error) {
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to update profile." });
+      }
+    });
+
+    // GET /activity-log/:email — fetch user activity log
+    app.get("/activity-log/:email", async (req, res) => {
+      try {
+        const { email } = req.params;
+        if (!email) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Email is required." });
+        }
+        const activities = await activityLogCollection
+          .find({ email })
+          .limit(50)
+          .toArray();
+        res.json({ success: true, activities });
+      } catch (error) {
+        res
+          .status(500)
+          .json({ success: false, message: "Failed to fetch activity log." });
+      }
+    });
+    // ...existing code...
+
+    // GET /bookings/member/:email - Get all bookings for a member with trainer info
+    app.get("/bookings/member/:email", async (req, res) => {
+      try {
+        const { email } = req.params;
+        if (!email) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Email is required." });
+        }
+
+        // Find bookings for this member
+        const bookings = await bookingsCollection
+          .find({ userEmail: email })
+          .toArray();
+
+        // For each booking, populate trainer info
+        const bookingsWithTrainer = await Promise.all(
+          bookings.map(async (booking) => {
+            let trainer = null;
+            if (booking.trainerId) {
+              // Make sure to use ObjectId if trainerId is stored as ObjectId
+              try {
+                trainer = await trainnersCollection.findOne({
+                  _id: new ObjectId(booking.trainerId),
+                });
+              } catch {
+                trainer = null;
+              }
+            }
+            return {
+              ...booking,
+              trainer,
+            };
+          })
+        );
+
+        res.json({ success: true, bookings: bookingsWithTrainer });
+      } catch (error) {
+        res
+          .status(500)
+          .json({
+            success: false,
+            message: "Failed to fetch booked trainers.",
+          });
+      }
+    });
+
+    // ...existing code...
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
