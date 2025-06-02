@@ -12,7 +12,11 @@ const app = express();
 
 // Middleware
 const corsOptions = {
-  origin: ["http://localhost:5173", "http://localhost:5174"],
+  origin: [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "https://fitness-tracker-project-7cc0f.web.app",
+  ],
   credentials: true,
   optionSuccessStatus: 200,
 };
@@ -63,12 +67,11 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    // await client.connect();
+    await client.connect();
 
     app.post("/jwt", async (req, res) => {
       let user = req.body;
       try {
-        // Fetch user from database to get role
         const dbUser = await usersCollection.findOne({ email: user.email });
         if (!dbUser) {
           return res
@@ -76,7 +79,7 @@ async function run() {
             .send({ success: false, message: "User not found" });
         }
 
-        user = { email: user.email, role: dbUser.role || "member" }; // Use DB role, default to 'member'
+        user = { email: user.email, role: dbUser.role || "member" }; 
         console.log("Creating JWT for:", user);
         const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
           expiresIn: "365d",
@@ -109,8 +112,16 @@ async function run() {
         next();
       });
     };
+    async function logActivity({ email, description }) {
+      if (!email || !description) return;
+      await activityLogCollection.insertOne({
+        email,
+        description,
+        timestamp: new Date(),
+      });
+    }
+
     app.post("/logout", (req, res) => {
-      // With localStorage, logout is handled client-side by removing the token
       res.send({ success: true });
     });
 
@@ -119,6 +130,10 @@ async function run() {
     const classesCollection = client.db("ClassesDB").collection("Classes");
     const bookingsCollection = client.db("BookingsDB").collection("Bookings");
     const paymentsCollection = client.db("PaymentsDB").collection("Payments");
+    const activityLogCollection = client
+      .db("ActivityLogDB")
+      .collection("ActivityLog");
+
     const applyTrainerCollection = client
       .db("ApplyTrainerDB")
       .collection("ApplyTrainer");
@@ -149,13 +164,11 @@ async function run() {
           timestamp: Date.now(),
         });
 
-        res
-          .status(201)
-          .send({
-            success: true,
-            message: "User data posted successfully.",
-            result,
-          });
+        res.status(201).send({
+          success: true,
+          message: "User data posted successfully.",
+          result,
+        });
       } catch (error) {
         console.error("Error creating user:", error);
         res
@@ -203,8 +216,7 @@ async function run() {
         console.log("Updating role to:", role);
 
         const user = await usersCollection.findOne({ email });
-        console.log("User found:", user); // Check if the user exists
-
+        console.log("User found:", user); 
         if (!user) {
           return res
             .status(404)
@@ -232,17 +244,15 @@ async function run() {
 
     app.get("/applytrainer", verifyToken, verifyAdmin, async (req, res) => {
       try {
-        const trainers = await applyTrainerCollection.find({}).toArray(); // Adjust collection name
+        const trainers = await applyTrainerCollection.find({}).toArray(); 
         console.log("Fetched applied trainers:", trainers);
         res.status(200).send(trainers);
       } catch (error) {
         console.error("Error fetching applied trainers:", error);
-        res
-          .status(500)
-          .send({
-            success: false,
-            message: error.message || "Failed to fetch applied trainers",
-          });
+        res.status(500).send({
+          success: false,
+          message: error.message || "Failed to fetch applied trainers",
+        });
       }
     });
 
@@ -252,24 +262,20 @@ async function run() {
         const result = await applyTrainerCollection.insertOne(application);
 
         if (result.insertedId) {
-          res
-            .status(201)
-            .send({
-              success: true,
-              message: "Application submitted successfully!",
-            });
+          res.status(201).send({
+            success: true,
+            message: "Application submitted successfully!",
+          });
         } else {
           throw new Error("Database insertion failed");
         }
       } catch (error) {
         console.error("Error submitting trainer application:", error);
-        res
-          .status(500)
-          .send({
-            success: false,
-            message: "Failed to submit application. Please try again.",
-            error,
-          });
+        res.status(500).send({
+          success: false,
+          message: "Failed to submit application. Please try again.",
+          error,
+        });
       }
     });
     // Fetch Trainer Details by ID
@@ -321,20 +327,16 @@ async function run() {
               .status(404)
               .send({ success: false, message: "Trainer not found" });
           }
-          res
-            .status(200)
-            .send({
-              success: true,
-              message: "Trainer application deleted successfully",
-            });
+          res.status(200).send({
+            success: true,
+            message: "Trainer application deleted successfully",
+          });
         } catch (error) {
           console.error("Error deleting trainer application:", error);
-          res
-            .status(500)
-            .send({
-              success: false,
-              message: "Failed to delete trainer application",
-            });
+          res.status(500).send({
+            success: false,
+            message: "Failed to delete trainer application",
+          });
         }
       }
     );
@@ -349,13 +351,10 @@ async function run() {
             .json({ error: "Trainer data is missing or incomplete" });
         }
 
-        // Insert the new trainer into the database
         const result = await trainnersCollection.insertOne(newTrainer);
 
-        // Send a success response
         res.status(201).json({ message: "Trainer added successfully" });
       } catch (error) {
-        // Handle any errors during the insertion process
         console.error("Error adding trainer:", error);
         res
           .status(500)
@@ -413,11 +412,10 @@ async function run() {
       verifyTrainer,
       async (req, res) => {
         try {
-          // Assuming bookings have a field like 'trainerEmail' or 'trainerId'
           const trainerEmail = req.user.email;
           const result = await bookingsCollection
             .find({ trainerEmail: trainerEmail })
-            .toArray(); // Filter bookings
+            .toArray(); 
           res.status(200).send(result);
         } catch (error) {
           res.status(500).send({ message: "Failed to fetch bookings", error });
@@ -445,20 +443,16 @@ async function run() {
               .status(404)
               .send({ success: false, message: "Trainer not found" });
           }
-          res
-            .status(200)
-            .send({
-              success: true,
-              message: "Trainer application deleted successfully",
-            });
+          res.status(200).send({
+            success: true,
+            message: "Trainer application deleted successfully",
+          });
         } catch (error) {
           console.error("Error deleting trainer application:", error);
-          res
-            .status(500)
-            .send({
-              success: false,
-              message: "Failed to delete trainer application",
-            });
+          res.status(500).send({
+            success: false,
+            message: "Failed to delete trainer application",
+          });
         }
       }
     );
@@ -468,12 +462,10 @@ async function run() {
         const trainerEmail = req.user.email; // Get trainer ID from JWT
         const { days, slotName, slotTime } = req.body;
 
-        // Validate inputs
         if (!days || !slotName || !slotTime) {
           return res.status(400).json({ message: "All fields are required" });
         }
 
-        // Find the trainer
         const trainer = await trainnersCollection.findOne({
           email: trainerEmail,
         });
@@ -481,16 +473,14 @@ async function run() {
           return res.status(404).json({ message: "Trainer not found" });
         }
 
-        // Create a new slot object
         const newSlot = {
-          slotId: uuidv4(), // Generate a unique slotId
+          slotId: uuidv4(), 
           slotName,
           slotTime,
           isBooked: false,
           daysAvailable: days,
         };
 
-        // Update the trainer document by pushing the new slot onto the availableSlots array
         const result = await trainnersCollection.updateOne(
           { email: trainerEmail },
           { $push: { availableSlots: newSlot } }
@@ -509,17 +499,13 @@ async function run() {
       verifyTrainer,
       async (req, res) => {
         try {
-          const trainerEmail = req.params.email; // getting trainer email from params
-          const userEmail = req.user.email; // the email getting from access token
-
-          //Check if the user's email matches the trainerEmail to avoid getting other trainer slot's
+          const trainerEmail = req.params.email;
+          const userEmail = req.user.email; 
           if (userEmail !== trainerEmail) {
             return res
               .status(403)
               .send({ success: false, message: "Forbidden" });
           }
-
-          // Fetch the trainer document
           const trainer = await trainnersCollection.findOne({
             email: trainerEmail,
           });
@@ -528,8 +514,7 @@ async function run() {
             return res.status(404).json({ message: "Trainer not found" });
           }
 
-          const slots = trainer.availableSlots; // Extract the availableSlots array
-
+          const slots = trainer.availableSlots;
           console.log("Fetched slots for trainer:", trainerEmail, slots);
           res.status(200).json({ success: true, data: slots });
         } catch (error) {
@@ -548,17 +533,16 @@ async function run() {
       verifyTrainer,
       async (req, res) => {
         try {
-          const trainerEmail = req.user.email; // Get trainer email from JWT
-          const slotId = req.params.slotId; // Get slotId from params
+          const trainerEmail = req.user.email; 
+          const slotId = req.params.slotId; 
 
           // Validate slotId (very important)
           if (!slotId || typeof slotId !== "string") {
             return res.status(400).json({ message: "Invalid slotId" });
           }
 
-          // Verify that the trainer exists and has the slot
           const trainer = await trainnersCollection.findOne(
-            { email: trainerEmail, "availableSlots.slotId": slotId } // Query for the slot
+            { email: trainerEmail, "availableSlots.slotId": slotId }
           );
 
           if (!trainer) {
@@ -568,10 +552,9 @@ async function run() {
           }
           console.log("Trainer availableSlots:", trainer.availableSlots);
 
-          // Use MongoDB's $pull operator to remove the slot from the array
           const result = await trainnersCollection.updateOne(
             { email: trainerEmail },
-            { $pull: { availableSlots: { slotId: slotId } } } // Remove the slot with matching slotId
+            { $pull: { availableSlots: { slotId: slotId } } } 
           );
 
           console.log("Update Result:", result);
@@ -594,19 +577,16 @@ async function run() {
       try {
         const { name, description } = req.body;
 
-        // Validate input
         if (!name || !description) {
           return res
             .status(400)
             .json({ message: "Class name and description are required." });
         }
         const result = await classesCollection.insertOne({ name, description });
-        res
-          .status(201)
-          .json({
-            classId: result.insertedId,
-            message: "Class added successfully.",
-          });
+        res.status(201).json({
+          classId: result.insertedId,
+          message: "Class added successfully.",
+        });
       } catch {
         res
           .status(500)
@@ -650,70 +630,66 @@ async function run() {
       }
     });
 
-    app.get('/forum/posts', verifyToken, async (req, res) => {
+    app.get("/forum/posts", verifyToken, async (req, res) => {
       try {
-        const page = parseInt(req.query.page) || 1; // Default to page 1
+        const page = parseInt(req.query.page) || 1; 
         const limit = 6;
         const skip = (page - 1) * limit;
 
-        // Count total posts
         const totalPosts = await forumPostsCollection.countDocuments({});
 
-        // Fetch posts with user info
-        const posts = await forumPostsCollection.aggregate([
-          {
-            $lookup: {
-              from: "users",
-              localField: "userId",
-              foreignField: "_id",
-              as: "user"
-            }
-          },
-          {
-            $unwind: "$user" // Unwind the user array
-          },
-          {
-            $project: {  // Correctly project fields, including userId and user details
-              _id: 1,
-              title: 1,
-              content: 1,
-              createdAt: 1,
-              upvotes: { $ifNull: ["$upvotes", 0] },
-              downvotes: { $ifNull: ["$downvotes", 0] },
-              "user.name": 1,
-              "user.email": 1,
-              "user.role": 1,
-            }
-          },
-          {
-            $skip: skip
-          },
-          {
-            $limit: limit
-          },
-          {
-            $sort: { createdAt: -1 } // Sort by creation date
-          }
-        ]).toArray();
+        const posts = await forumPostsCollection
+          .aggregate([
+            {
+              $lookup: {
+                from: "users",
+                localField: "author",
+                foreignField: "username", 
+                as: "user",
+              },
+            },
+            {
+              $unwind: {
+                path: "$user",
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                title: 1,
+                content: 1,
+                createdAt: 1,
+                upvotes: { $ifNull: ["$upvotes", 0] },
+                downvotes: { $ifNull: ["$downvotes", 0] },
+                authorName: "$user.name", 
+                author: 1, 
+              },
+            },
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limit },
+          ])
+          .toArray();
         const totalPages = Math.ceil(totalPosts / limit);
 
         res.send({ success: true, posts, totalPages });
       } catch (error) {
         console.error("Error fetching posts:", error);
-        res.status(500).send({ success: false, message: "Failed to fetch posts." });
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to fetch posts." });
       }
     });
-    app.post('/forum/posts', verifyToken, async (req, res) => {
+    app.post("/forum/posts", verifyToken, async (req, res) => {
       try {
-        const userId = req.user.userId; // Get trainer ID from JWT
+        const userId = req.user.userId; 
         const { title, content } = req.body;
 
-        // Validate inputs
         if (!title || !content) {
-          return res.status(400).json({ message: 'All fields are required' });
+          return res.status(400).json({ message: "All fields are required" });
         }
 
-        // Create a new slot object
         const newPost = {
           userId: new ObjectId(userId),
           title,
@@ -724,13 +700,12 @@ async function run() {
           voters: [],
         };
 
-        // Update the trainer document by pushing the new slot onto the availableSlots array
         const result = await forumPostsCollection.insertOne(newPost);
 
-        res.status(201).json({ message: 'Post created successfully' });
+        res.status(201).json({ message: "Post created successfully" });
       } catch (error) {
-        console.error('Error creating post:', error);
-        res.status(500).json({ message: 'Failed to create post' });
+        console.error("Error creating post:", error);
+        res.status(500).json({ message: "Failed to create post" });
       }
     });
     app.post("/forum/posts/:postId/vote", verifyToken, async (req, res) => {
@@ -738,26 +713,21 @@ async function run() {
         const { postId } = req.params;
         const { email, vote } = req.body;
 
-        // Check if postId is a valid ObjectId
         if (!ObjectId.isValid(postId)) {
           return res
             .status(400)
             .send({ success: false, message: "Invalid post ID." });
         }
-        // Check if email is a valid email
         if (!isValidEmail(email)) {
           return res
             .status(400)
             .send({ success: false, message: "Invalid email format." });
         }
-        //Check for Valid Vote Value
         if (typeof vote !== "number" || (vote !== 1 && vote !== -1)) {
-          return res
-            .status(400)
-            .send({
-              success: false,
-              message: "Invalid vote value. Must be 1 or -1.",
-            });
+          return res.status(400).send({
+            success: false,
+            message: "Invalid vote value. Must be 1 or -1.",
+          });
         }
 
         const post = await forumPostsCollection.findOne({
@@ -952,8 +922,94 @@ async function run() {
         res.status(500).json({ error: "Failed to fetch balance data" });
       }
     });
+    app.put("/users/profile", async (req, res) => {
+      try {
+        const { email, name, profilePicture } = req.body;
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: { name, image: profilePicture } }
+        );
+        await logActivity({
+          email,
+          description: "Updated profile information.",
+        });
+        res.send({ success: true, message: "Profile updated.", result });
+      } catch (error) {
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to update profile." });
+      }
+    });
+
+    // GET /activity-log/:email — fetch user activity log
+    app.get("/activity-log/:email", async (req, res) => {
+      try {
+        const { email } = req.params;
+        if (!email) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Email is required." });
+        }
+        const activities = await activityLogCollection
+          .find({ email })
+          .limit(50)
+          .toArray();
+        res.json({ success: true, activities });
+      } catch (error) {
+        res
+          .status(500)
+          .json({ success: false, message: "Failed to fetch activity log." });
+      }
+    });
+    // ...existing code...
+
+    // GET /bookings/member/:email - Get all bookings for a member with trainer info
+    app.get("/bookings/member/:email", async (req, res) => {
+      try {
+        const { email } = req.params;
+        if (!email) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Email is required." });
+        }
+
+        // Find bookings for this member
+        const bookings = await bookingsCollection
+          .find({ userEmail: email })
+          .toArray();
+
+        // For each booking, populate trainer info
+        const bookingsWithTrainer = await Promise.all(
+          bookings.map(async (booking) => {
+            let trainer = null;
+            if (booking.trainerId) {
+              // Make sure to use ObjectId if trainerId is stored as ObjectId
+              try {
+                trainer = await trainnersCollection.findOne({
+                  _id: new ObjectId(booking.trainerId),
+                });
+              } catch {
+                trainer = null;
+              }
+            }
+            return {
+              ...booking,
+              trainer,
+            };
+          })
+        );
+
+        res.json({ success: true, bookings: bookingsWithTrainer });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "Failed to fetch booked trainers.",
+        });
+      }
+    });
+
     // Send a ping to confirm a successful connection
-    // await client.db("admin").command({ ping: 1 });
+    await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
